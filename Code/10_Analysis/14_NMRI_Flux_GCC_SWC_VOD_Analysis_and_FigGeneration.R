@@ -5,7 +5,9 @@ library(dplyr)
 library(data.table)
 library(ggplot2)
 library(ggpubr)
+library(ggpmisc)
 library(ggh4x)
+library(gridGraphics)
 library(ggpmisc)
 library(cowplot)
 library(amerifluxr)
@@ -198,16 +200,21 @@ nmri.outlier.filter = function(df.in) {
   # Filter 0 values
   outlier.0 = which(df.in$Value %in% 0)
   
-  for (i in 1 : length(outlier.0)) {
-    df.out[outlier.0[i],][['Value']] = NA
+  if (length(outlier.0) > 0) {
+    for (i in 1 : length(outlier.0)) {
+      df.out[outlier.0[i],][['Value']] = NA
+    }
   }
   
   # Filter 1 values
   outlier.1 = which(df.in$Value %in% 1)
   
-  for (j in 1 : length(outlier.1)) {
-    df.out[outlier.1[j],][['Value']] = NA
+  if (length(outlier.1) > 0) {
+    for (j in 1 : length(outlier.1)) {
+      df.out[outlier.1[j],][['Value']] = NA
+    }
   }
+  
   # Return ouutlier-filtered data frame
   return(df.out)
 }
@@ -219,7 +226,7 @@ wkg.nmri = datefill.fun(data.frame('Dates' = as.Date(paste('2021', wkg.gnss$mont
                                    'Month' = wkg.gnss$month,
                                    'Day' = wkg.gnss$day,
                                    'LocalHour' = wkg.gnss$localHour,
-                                   'Value' = wkg.gnss$NMRI,
+                                   'Value' = wkg.gnss$NMRI_Proxy,
                                    'Dataset' = 'NMRI',
                                    'Site' = 'WKG'))
 
@@ -256,15 +263,15 @@ wkg.nmri.predawn = wkg.nmri[wkg.nmri$LocalHour %in% seq(0,6,1),] # 12:00 AM to 6
 wkg.nmri.predawn$Period = 'Predawn'
 wkg.nmri.afternoon = wkg.nmri[wkg.nmri$LocalHour %in% seq(10,14,1),] # 10:00 AM to 2:00 PM
 wkg.nmri.afternoon$Period = 'Afternoon'
-wkg.nmri.evening = wkg.nmri[wkg.nmri$LocalHour %in% seq(19,24,1),] # 7:00 PM to 11:00 PM
+wkg.nmri.evening = wkg.nmri[wkg.nmri$LocalHour %in% seq(18,23,1),] # 6:00 PM to 11:00 PM
 wkg.nmri.evening$Period = 'Evening'
 
 # SWC
-wkg.swc.predawn = amflux.wkg[amflux.wkg$LocalHour %in% seq(0,6,1),] # 12:00 AM to 6:00 AM
+wkg.swc.predawn = amflux.wkg[amflux.wkg$LocalHour %in% seq(0,6,1),] 
 wkg.swc.predawn$Period = 'Predawn'
-wkg.swc.afternoon = amflux.wkg[amflux.wkg$LocalHour %in% seq(10,14,1),] # 10:00 AM to 2:00 PM
+wkg.swc.afternoon = amflux.wkg[amflux.wkg$LocalHour %in% seq(10,14,1),] 
 wkg.swc.afternoon$Period = 'Afternoon'
-wkg.swc.evening = amflux.wkg[amflux.wkg$LocalHour %in% seq(19,24,1),] # 7:00 PM to 11:00 PM
+wkg.swc.evening = amflux.wkg[amflux.wkg$LocalHour %in% seq(18,23,1),] 
 wkg.swc.evening$Period = 'Evening'
 
 # ET (FLUXNET HOURLY)
@@ -272,7 +279,7 @@ wkg.et.predawn = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(0,6,1),]
 wkg.et.predawn$Period = 'Predawn'
 wkg.et.afternoon = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(10,14,1),]
 wkg.et.afternoon$Period = 'Afternoon'
-wkg.et.evening = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(19,24,1),]
+wkg.et.evening = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(18,23,1),]
 wkg.et.evening$Period = 'Evening'
 
 # GPP (FLUXNET HOURLY)
@@ -280,7 +287,7 @@ wkg.gpp.predawn = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(0,6,1),]
 wkg.gpp.predawn$Period = 'Predawn'
 wkg.gpp.afternoon = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(10,14,1),]
 wkg.gpp.afternoon$Period = 'Afternoon'
-wkg.gpp.evening = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(19,24,1),]
+wkg.gpp.evening = fluxnet.wkg[fluxnet.wkg$LocalHour %in% seq(18,23,1),]
 wkg.gpp.evening$Period = 'Evening'
 
 # Combine NMRI period subsets and aggregate by day (mean and median)
@@ -596,8 +603,17 @@ wkg.smap.vwc.pm.loess = loess.datefill(wkg.smap.vwc.pm, loess.span)
 # Set greening and browning dates
 # -------------------------------------------------------------------------
 
-greening.dates = seq(as.Date('2021-06-30'),as.Date('2021-08-23'),'day')
-browning.dates = seq(as.Date('2021-08-24'),as.Date('2021-10-26'),'day')
+gcc = phenocam.gr.wkg[phenocam.gr.wkg$date %in% date.seq,]
+gcc$Value = gcc$gcc_90
+
+gcc.loess.span = 0.075
+gcc.smoothed = loess.datefill(gcc, gcc.loess.span)
+
+date.peak.gcc = gcc$date[which.max(gcc$Value)]
+date.peak.gcc.smoothed = gcc.smoothed$Dates[which.max(gcc.smoothed$y)]
+
+greening.dates = seq(as.Date('2021-06-30'),as.Date(date.peak.gcc.smoothed),'day')
+browning.dates = seq(as.Date(date.peak.gcc.smoothed + 1),as.Date('2021-10-26'),'day')
 
 # --------------------------------------------------------------------------------
 # Set dates for pulse events
@@ -613,206 +629,216 @@ p3.dates = seq(as.Date('2021-09-29'),as.Date('2021-10-7'),'day')
 # --------------------------------------------------------------------------------------------
 
 day.night.pulse.nmri = function() {
-
-   # ---- Plot paramters
-   axisText = element_text(size = 13)
-   axisTitleY = element_text(size = 13)
-   plotTitle = element_text(size = 16, face = 'bold')
-
-   # ---- NMRI
-   # Day/night values for pulse events
-   nmri = wkg.nmri.day.night
-   nmri$MonsoonPhase = ''
-   nmri[nmri$Dates %in% greening.dates,9] = 'Greening'
-   nmri[nmri$Dates %in% browning.dates,9] = 'Browning'
-   nmri$MonsoonPhase = factor(nmri$MonsoonPhase, levels = c('Greening','Browning'))
-
-   # Subset pulse events
-   nmri.p1 = nmri[nmri$Dates %in% c(p1.dates,seq(as.Date('2021-07-16'),as.Date('2021-07-18'),by='day')),]
-   nmri.p1$Pulse = 'P1'
-   nmri.p2 = nmri[nmri$Dates %in% p2.dates,]
-   nmri.p2$Pulse = 'P2'
-   nmri.p3 = nmri[nmri$Dates %in% p3.dates,]
-   nmri.p3$Pulse = 'P3'
-   nmri.pulses = rbind(nmri.p1, nmri.p2, nmri.p3)
-
-   nmri.pulses$Period = factor(nmri.pulses$Period, levels = c('Nighttime','Daytime'))
-   nmri.pulses$Pulse = factor(nmri.pulses$Pulse, levels = c('P1','P2','P3'))
-
-   # Pulse datetimes
-   p1.datetime = nmri.p1$DateTime[1]
-   p2.datetime = nmri.p2$DateTime[1]
-   p3.datetime = nmri.p3$DateTime[1]
-
-   # Pulse labels
-   pulse.labs = data.frame(x = c(p1.datetime,p2.datetime,p3.datetime),
-                           y = c(0.73,0.46,0.73),
-                           label = c('Pulse 1\n07/10',
-                                     'Pulse 2\n08/14',
-                                     'Pulse 3\n09/29'))
-
-   # Pulse slopes (Mann-Kendall Sen's Slope)
-   mannkendall.slope.fun = function(data.in) {
-     mk = wql::mannKen(data.in)
-     # Slope
-     mk.slope = round(mk$sen.slope,4)
-     mk.slope = sprintf('%7.4f', mk.slope)
-     # Significance
-     mk.p = mk$p.value
-     if (mk.p > 0.001){ mk.p = round(mk.p,4)}
-     if (mk.p < 0.001){ mk.p = '<0.001'}
-     #mk.p = sprintf('%7.4f', mk.p)
-     return(c(mk.slope,mk.p))
-   }
-
-   # Daytime
-   nmri.p1.dt.slope = mannkendall.slope.fun(nmri.p1[nmri.p1$Period == 'Daytime',6])
-   nmri.p2.dt.slope = mannkendall.slope.fun(nmri.p2[nmri.p2$Period == 'Daytime',6])
-   nmri.p3.dt.slope = mannkendall.slope.fun(nmri.p3[nmri.p3$Period == 'Daytime',6])
-
-   # Nighttime
-   nmri.p1.nt.slope = mannkendall.slope.fun(nmri.p1[nmri.p1$Period == 'Nighttime',6])
-   nmri.p2.nt.slope = mannkendall.slope.fun(nmri.p2[nmri.p2$Period == 'Nighttime',6])
-   nmri.p3.nt.slope = mannkendall.slope.fun(nmri.p3[nmri.p3$Period == 'Nighttime',6])
-
-   # Labels for time series plots
-   nmri.pulse.slope.labs = rbind(data.frame('x' = c(rep(nmri.pulses$DateTime[9],2),rep(nmri.pulses$DateTime[27],2),rep(nmri.pulses$DateTime[45],2)),
-                                            'y' = c(0.75,0.72,0.55,0.52,0.75,0.72),
-                                            'Pulse' = c(rep('P1',2),rep('P2',2),rep('P3',2)),
-                                            'Period' = 'Daytime',
-                                            'labs' = c(paste('MK Slope =', nmri.p1.dt.slope[1]),
-                                                       paste('p =', nmri.p1.dt.slope[2]),
-                                                       paste('MK Slope =', nmri.p2.dt.slope[1]),
-                                                       paste('p =', nmri.p2.dt.slope[2]),
-                                                       paste('MK Slope =', nmri.p3.dt.slope[1]),
-                                                       paste('p =', nmri.p3.dt.slope[2]))),
-                                 data.frame('x' = c(rep(nmri.pulses$DateTime[9],2),rep(nmri.pulses$DateTime[27],2),rep(nmri.pulses$DateTime[45],2)),
-                                            'y' = c(0.68,0.65,0.48,0.45,0.68,0.65),
-                                            'Pulse' = c(rep('P1',2),rep('P2',2),rep('P3',2)),
-                                            'Period' = 'Nighttime',
-                                            'labs' = c(paste('MK Slope =', nmri.p1.nt.slope[1]),
-                                                       paste('p =', nmri.p1.nt.slope[2]),
-                                                       paste('MK Slope =', nmri.p2.nt.slope[1]),
-                                                       paste('p =', nmri.p2.nt.slope[2]),
-                                                       paste('MK Slope =', nmri.p3.nt.slope[1]),
-                                                       paste('p =', nmri.p3.nt.slope[2]))))
-
-   nmri.pulse.slope.labs$Period = factor(nmri.pulse.slope.labs$Period, levels = c('Nighttime','Daytime'))
-   nmri.pulse.slope.labs$Pulse = factor(nmri.pulse.slope.labs$Pulse, levels = c('P1','P2','P3'))
-
-   # Full season timeseries
-   nmri.full.ts = ggplot(data = nmri,
+  
+  # ---- Plot paramters
+  axisTextY = element_text(size = 13)
+  axisTextX = element_text(size = 13, angle = 20, hjust = 0.8, vjust = 0.75)
+  axisTitleY = element_text(size = 13)
+  plotTitle = element_text(size = 16, face = 'bold')
+  
+  # ---- NMRI
+  # Day/night values for pulse events
+  nmri = wkg.nmri.day.night
+  nmri$MonsoonPhase = ''
+  nmri[nmri$Dates %in% greening.dates,9] = 'Greening'
+  nmri[nmri$Dates %in% browning.dates,9] = 'Browning'
+  nmri$MonsoonPhase = factor(nmri$MonsoonPhase, levels = c('Greening','Browning'))
+  
+  # Subset pulse events
+  nmri.p1 = nmri[nmri$Dates %in% c(p1.dates,seq(as.Date('2021-07-16'),as.Date('2021-07-18'),by='day')),]
+  nmri.p1$Pulse = 'P1'
+  nmri.p2 = nmri[nmri$Dates %in% p2.dates,]
+  nmri.p2$Pulse = 'P2'
+  nmri.p3 = nmri[nmri$Dates %in% p3.dates,]
+  nmri.p3$Pulse = 'P3'
+  nmri.pulses = rbind(nmri.p1, nmri.p2, nmri.p3)
+  
+  nmri.pulses$Period = factor(nmri.pulses$Period, levels = c('Nighttime','Daytime'))
+  nmri.pulses$Pulse = factor(nmri.pulses$Pulse, levels = c('P1','P2','P3'))
+  
+  # Pulse datetimes
+  p1.datetime = nmri.p1$DateTime[1]
+  p2.datetime = nmri.p2$DateTime[1]
+  p3.datetime = nmri.p3$DateTime[1]
+  
+  # Pulse labels
+  pulse.labs = data.frame(x = c(p1.datetime,p2.datetime,p3.datetime),
+                          y = c(0.65,0.65,0.65),  # <-- NMRI (5-25 deg.)
+                          label = c('Pulse 1\n07/10',
+                                    'Pulse 2\n08/14',
+                                    'Pulse 3\n09/29'))
+  
+  # Pulse slopes (Mann-Kendall Sen's Slope)
+  mannkendall.slope.fun = function(data.in) {
+    mk = wql::mannKen(data.in)
+    # Slope
+    mk.slope = round(mk$sen.slope,4)
+    mk.slope = sprintf('%7.4f', mk.slope)
+    # Significance
+    mk.p = mk$p.value
+    if (mk.p > 0.001){ mk.p = round(mk.p,4)}
+    if (mk.p < 0.001){ mk.p = '<0.001'}
+    #mk.p = sprintf('%7.4f', mk.p)
+    return(c(mk.slope,mk.p))
+  }
+  
+  # Daytime
+  nmri.p1.dt.slope = mannkendall.slope.fun(nmri.p1[nmri.p1$Period == 'Daytime',6])
+  nmri.p2.dt.slope = mannkendall.slope.fun(nmri.p2[nmri.p2$Period == 'Daytime',6])
+  nmri.p3.dt.slope = mannkendall.slope.fun(nmri.p3[nmri.p3$Period == 'Daytime',6])
+  
+  # Nighttime
+  nmri.p1.nt.slope = mannkendall.slope.fun(nmri.p1[nmri.p1$Period == 'Nighttime',6])
+  nmri.p2.nt.slope = mannkendall.slope.fun(nmri.p2[nmri.p2$Period == 'Nighttime',6])
+  nmri.p3.nt.slope = mannkendall.slope.fun(nmri.p3[nmri.p3$Period == 'Nighttime',6])
+  
+  # Labels for time series plots
+  nmri.pulse.slope.labs = rbind(data.frame('x' = c(rep(nmri.pulses$DateTime[9],2),rep(nmri.pulses$DateTime[27],2),rep(nmri.pulses$DateTime[45],2)),
+                                           'y' = c(0.75,0.71,0.45,0.41,0.75,0.71),
+                                           'Pulse' = c(rep('P1',2),rep('P2',2),rep('P3',2)),
+                                           'Period' = 'Daytime',
+                                           'labs' = c(paste('MK Slope =', nmri.p1.dt.slope[1]),
+                                                      paste('p =', nmri.p1.dt.slope[2]),
+                                                      paste('MK Slope =', nmri.p2.dt.slope[1]),
+                                                      paste('p =', nmri.p2.dt.slope[2]),
+                                                      paste('MK Slope =', nmri.p3.dt.slope[1]),
+                                                      paste('p =', nmri.p3.dt.slope[2]))),
+                                data.frame('x' = c(rep(nmri.pulses$DateTime[9],2),rep(nmri.pulses$DateTime[27],2),rep(nmri.pulses$DateTime[45],2)),
+                                           'y' = c(0.66,0.62,0.36,0.32,0.66,0.62),  
+                                           'Pulse' = c(rep('P1',2),rep('P2',2),rep('P3',2)),
+                                           'Period' = 'Nighttime',
+                                           'labs' = c(paste('MK Slope =', nmri.p1.nt.slope[1]),
+                                                      paste('p =', nmri.p1.nt.slope[2]),
+                                                      paste('MK Slope =', nmri.p2.nt.slope[1]),
+                                                      paste('p =', nmri.p2.nt.slope[2]),
+                                                      paste('MK Slope =', nmri.p3.nt.slope[1]),
+                                                      paste('p =', nmri.p3.nt.slope[2]))))
+  
+  nmri.pulse.slope.labs$Period = factor(nmri.pulse.slope.labs$Period, levels = c('Nighttime','Daytime'))
+  nmri.pulse.slope.labs$Pulse = factor(nmri.pulse.slope.labs$Pulse, levels = c('P1','P2','P3'))
+  
+  # Full season timeseries
+  nmri.full.ts = ggplot(data = nmri,
+                        aes(x = DateTime,
+                            y = NMRI_PeriodMean,
+                            col = Period)) +
+    geom_point(size = 3, pch = 19, alpha = 0.75) +
+    geom_line(alpha = 0.5, linewidth = 1.5) +
+    scale_color_manual(values = c('blue','red')) +
+    ylim(c(0.3,0.7)) +
+    xlab('') +
+    ylab('NMRI [ ]') +
+    #ggtitle('Day & night mean NMRI (full season)') +
+    annotate(x = head(nmri.p1$DateTime,1), xend = head(nmri.p1$DateTime,1),
+             y = -Inf, yend = Inf,
+             geom = 'segment', linewidth = 2,
+             color = 'blue', alpha = 0.25) +
+    annotate(x = head(nmri.p2$DateTime,1), xend = head(nmri.p2$DateTime,1),
+             y = -Inf, yend = Inf,
+             geom = 'segment', linewidth = 2,
+             color = 'blue', alpha = 0.25) +
+    annotate(x = head(nmri.p3$DateTime,1), xend = head(nmri.p3$DateTime,1),
+             y = -Inf, yend = Inf,
+             geom = 'segment', linewidth = 2,
+             color = 'blue', alpha = 0.25) +
+    geom_text(data = pulse.labs,
+              aes(x = x, y = y, label = label),
+              inherit.aes = FALSE,
+              size = 7, fontface = 'bold') +
+    theme_bw() +
+    theme(axis.text.y = axisTextY,
+          axis.text.x = axisTextX,
+          axis.title.y = axisTitleY,
+          #plot.title = plotTitle,
+          legend.title = element_blank(),
+          legend.text = element_text(size = 15),
+          legend.position = 'none',
+          panel.border = element_rect(color = 'black', fill = NA, linewidth = 1))
+  
+  nmri.full.ts
+  
+  
+  # Pulse timeseries
+  nmri.pulse.ts = ggplot(data = nmri.pulses,
                          aes(x = DateTime,
                              y = NMRI_PeriodMean,
                              col = Period)) +
-     geom_point(size = 2, pch = 19, alpha = 0.75) +
-     geom_line(alpha = 0.5, linewidth = 1) +
-     scale_color_manual(values = c('blue','red')) +
-     xlab('') +
-     ylab('NMRI [ ]') +
-     ggtitle('Day & night mean NMRI (full season)') +
-     annotate(x = head(nmri.p1$DateTime,1), xend = head(nmri.p1$DateTime,1),
-              y = -Inf, yend = Inf,
-              geom = 'segment', linewidth = 2,
-              color = 'blue', alpha = 0.25) +
-     annotate(x = head(nmri.p2$DateTime,1), xend = head(nmri.p2$DateTime,1),
-              y = -Inf, yend = Inf,
-              geom = 'segment', linewidth = 2,
-              color = 'blue', alpha = 0.25) +
-     annotate(x = head(nmri.p3$DateTime,1), xend = head(nmri.p3$DateTime,1),
-              y = -Inf, yend = Inf,
-              geom = 'segment', linewidth = 2,
-              color = 'blue', alpha = 0.25) +
-     geom_text(data = pulse.labs,
-               aes(x = x, y = y, label = label),
-               inherit.aes = FALSE,
-               size = 4.5, fontface = 'bold') +
-     theme_bw() +
-     theme(axis.text = axisText,
-           axis.title.y = axisTitleY,
-           plot.title = plotTitle,
-           legend.title = element_blank(),
-           legend.text = element_text(size = 15),
-           legend.position = 'none')
-
-   nmri.full.ts
-   
-   
-   # Pulse timeseries
-   nmri.pulse.ts = ggplot(data = nmri.pulses,
-                          aes(x = DateTime,
-                              y = NMRI_PeriodMean,
-                              col = Period)) +
-     geom_line(data = nmri.pulses,
-               aes(x = DateTime, y = NMRI_PeriodMean),
-               inherit.aes = FALSE,
-               linewidth = 0.75, alpha = 0.75) +
-     geom_point(size = 4, pch = 19, alpha = 0.75) +
-     geom_smooth(formula = y ~ x,
-                 na.rm = TRUE,
-                 se = FALSE,
-                 method = 'lm',
-                 linewidth = 1,
-                 linetype = 'dashed',
-                 alpha = 0.25,
-                 show.legend = TRUE) +
-     xlab('') +
-     ylab('NMRI [ ]') +
-     #ggtitle('NMRI for rainfall pulse events') +
-     scale_color_manual(values = c('blue','red'),
-                        labels = c('Nighttime (06:00 PM - 06:00 AM)',
-                                   'Daytime   (10:00 AM - 02:00 PM)'),
-                        name = 'Diurnal period aggregates (mean)') +
-     geom_vline(data = filter(nmri.pulses, Pulse == 'P1'),
-                aes(xintercept = p1.datetime),
-                linewidth = 2,
-                color = 'blue', alpha = 0.25) +
-     geom_vline(data = filter(nmri.pulses, Pulse == 'P2'),
-                aes(xintercept = p2.datetime),
-                linewidth = 2,
-                color = 'blue', alpha = 0.25) +
-     geom_vline(data = filter(nmri.pulses, Pulse == 'P3'),
-                aes(xintercept = p3.datetime),
-                linewidth = 2,
-                color = 'blue', alpha = 0.25) +
-     # Slope labels
-     geom_text(data = nmri.pulse.slope.labs,
-               aes(x = x, y = y, label = labs, col = Period),
-               size = 6, show.legend = FALSE, hjust = 1) +
-     facet_wrap(Pulse~., ncol = 3, scales = 'free_x',
-                labeller = as_labeller(c(P1 = 'Pulse 1 (07/10)\nearly greening phase',
-                                         P2 = 'Pulse 2 (08/14)\nlate greening phase',
-                                         P3 = 'Pulse 3 (09/29)\nbrowning phase'))) +
-     theme_bw() +
-     theme(axis.text = axisText,
-           axis.title.y = axisTitleY,
-           legend.position = 'bottom',
-           legend.direction = 'vertical',
-           legend.title = element_text(size = 17, face = 'bold', hjust = 0),
-           legend.text = element_text(size = 17),
-           #legend.text.align = 0,
-           legend.box.margin = margin(-20,0,0,0),
-           #legend.justification = 0,
-           #plot.title = plotTitle,
-           panel.border = element_rect(color = 'black', fill = NA, linewidth = 1),
-           strip.background = element_rect(fill = 'white', color = 'white'),
-           strip.text = element_text(size = 20, face = 'bold'))
-   
-   # nmri.pulse.ts.legend = get_plot_component(nmri.pulse.ts + theme(legend.position = 'bottom',
-   #                                                                 legend.justification = 'bottom',
-   #                                                                 legend.direction = 'horizontal',
-   #                                                                 legend.margin = margin(-5,0,2,0, unit = 'mm')),
-   #                                           'guide-box-bottom', return_all = TRUE)
-
-   nmri.pulse.ts = ggdraw(nmri.pulse.ts) +
-     draw_label('a)', x = 0.035, y = 0.88, fontface = 'bold', size = 19, hjust = -0.5) +
-     draw_label('b)', x = 0.355, y = 0.88, fontface = 'bold', size = 19, hjust = -0.5) +
-     draw_label('c)', x = 0.675, y = 0.88, fontface = 'bold', size = 19, hjust = -0.5)
-
-   ggsave(filename = paste(figs.fp, 'Fig05_WKG_Diurnal_NMRI_Pulses_ONLY.png', sep = '/'),
-          nmri.pulse.ts,
-          height = 5, width = 15,
-          bg = 'white')
+    geom_line(data = nmri.pulses,
+              aes(x = DateTime, y = NMRI_PeriodMean),
+              inherit.aes = FALSE,
+              linewidth = 0.75, alpha = 0.75) +
+    geom_point(size = 4, pch = 19, alpha = 0.75) +
+    geom_smooth(formula = y ~ x,
+                na.rm = TRUE,
+                se = FALSE,
+                method = 'lm',
+                linewidth = 1,
+                linetype = 'dashed',
+                alpha = 0.25,
+                show.legend = TRUE) +
+    xlab('') +
+    ylab('NMRI [ ]') +
+    #ggtitle('NMRI for rainfall pulse events') +
+    scale_color_manual(values = c('blue','red'),
+                       labels = c('Nighttime (06:00 PM - 06:00 AM)',
+                                  'Daytime   (10:00 AM - 02:00 PM)'),
+                       #name = 'Diurnal period aggregates (mean)',
+                       name = 'NMRI diurnal period aggregates (mean)') +
+    geom_vline(data = filter(nmri.pulses, Pulse == 'P1'),
+               aes(xintercept = p1.datetime),
+               linewidth = 2,
+               color = 'blue', alpha = 0.25) +
+    geom_vline(data = filter(nmri.pulses, Pulse == 'P2'),
+               aes(xintercept = p2.datetime),
+               linewidth = 2,
+               color = 'blue', alpha = 0.25) +
+    geom_vline(data = filter(nmri.pulses, Pulse == 'P3'),
+               aes(xintercept = p3.datetime),
+               linewidth = 2,
+               color = 'blue', alpha = 0.25) +
+    # Slope labels
+    geom_text(data = nmri.pulse.slope.labs,
+              aes(x = x, y = y, label = labs, col = Period),
+              size = 6, show.legend = FALSE, hjust = 1) +
+    facet_wrap(Pulse~., ncol = 3, scales = 'free_x',
+               labeller = as_labeller(c(P1 = 'Pulse 1 (07/10)\nearly greening phase',
+                                        P2 = 'Pulse 2 (08/14)\nlate greening phase',
+                                        P3 = 'Pulse 3 (09/29)\nbrowning phase'))) +
+    theme_bw() +
+    theme(axis.text.y = axisTextY,
+          axis.text.x = axisTextX,
+          axis.title.y = axisTitleY,
+          legend.position = 'bottom',
+          legend.direction = 'vertical',
+          legend.title = element_text(size = 17, face = 'bold', hjust = 0),
+          legend.text = element_text(size = 17),
+          #legend.text.align = 0,
+          legend.box.margin = margin(-20,0,0,0),
+          #legend.justification = 0,
+          #plot.title = plotTitle,
+          panel.border = element_rect(color = 'black', fill = NA, linewidth = 1),
+          strip.background = element_rect(fill = 'white', color = 'white'),
+          strip.text = element_text(size = 20, face = 'bold'))
+  
+  nmri.pulse.ts = ggdraw(nmri.pulse.ts) +
+    draw_label('b)', x = 0.035, y = 0.82, fontface = 'bold', size = 19, hjust = -0.5) +
+    draw_label('c)', x = 0.355, y = 0.82, fontface = 'bold', size = 19, hjust = -0.5) +
+    draw_label('d)', x = 0.675, y = 0.82, fontface = 'bold', size = 19, hjust = -0.5)
+  
+  # Combine full-season timeseries with pulse-scale timeseries
+  nmri.full.pulse.ts.combo = plot_grid(plotlist = list(nmri.full.ts, nmri.pulse.ts),
+                                       ncol = 1,
+                                       rel_heights = c(0.75,1),
+                                       align = 'none',
+                                       axis = 'l',
+                                       labels = c('a)',''),
+                                       label_size = 19,
+                                       hjust = -2.8, vjust = 1.8)
+  
+  ggsave(filename = paste(figs.fp, 'Fig05_WKG_Diurnal_NMRI_Full_with_Pulses.png', sep = '/'),
+         nmri.full.pulse.ts.combo,
+         height = 9, width = 15,
+         bg = 'white')
 }
 
 day.night.pulse.nmri()
@@ -945,16 +971,14 @@ wkg.nmri.flux.ts.sp.fun = function() {
   # NMRI
   nmri.nt = wkg.nmri.day.night[wkg.nmri.day.night$Period == 'Nighttime',]
   colnames(nmri.nt)[6] = 'Value'
-  # nmri.nt = wkg.nmri.gpp.day.night[wkg.nmri.gpp.day.night$Period == 'Nighttime',][,c(1,3)]
-  # colnames(nmri.nt)[2] = 'Value'
   nmri.nt.loess = loess.datefill(nmri.nt, loess.span)
   nmri.nt.loess = na.omit(nmri.nt.loess)
   nmri.col = 'blue'
   nmri.lab = expression(bold('NMRI [ ] (nighttime)'))
+  nmri.xlim = round(c(min(nmri.nt$NMRI_PeriodMedian, na.rm = TRUE), max(nmri.nt$NMRI_PeriodMedian, na.rm = TRUE)), 2)
   
   # GPP
   gpp = wkg.gpp.day.night[wkg.gpp.day.night$Period == 'Daytime',c(1,3)]
-  #gpp = wkg.nmri.gpp.day.night[wkg.nmri.gpp.day.night$Period == 'Daytime',][,1:2]
   gpp.ylab = expression(bold(GPP~gC~m^-2~d^-1~'(daytime)'))
   gpp.col = 'darkolivegreen'
   gpp.ylim = c(0,15)
@@ -962,7 +986,6 @@ wkg.nmri.flux.ts.sp.fun = function() {
   
   # ET
   et = wkg.et.day.night[wkg.et.day.night$Period == 'Daytime',c(1,3)]
-  #et = wkg.nmri.et.day.night[wkg.nmri.et.day.night$Period == 'Daytime',][,1:2]
   et.ylab = expression(bold(ET~mm~d^-1~'(daytime)'))
   et.col = 'salmon'
   et.ylim = c(0,6)
@@ -1000,16 +1023,20 @@ wkg.nmri.flux.ts.sp.fun = function() {
     gcc.slope.b = mannkendall.slope.fun(gcc.b)
     
     # Legend graphical parameters
-    slope.legend.xjust.1 = -0.1
     slope.legend.xjust.2 = -0.2
     slope.legend.yjust = 2.25
     gpp.yax2.lab = gpp.ylab
     et.yax2.lab = et.ylab
     gcc.yax2.lab = gcc.ylab
+    
+    # - For unfiltered NMRI
+    slope.legend.xjust.1 = -0.15
     ts.legend.width = 25
-    ts.legend.ypos = 0.95
+    ts.legend.ypos = 0.725
     ts.legend.b.xpos = 85
     ts.legend.yspace = 1.25
+    ts.greening.browning.text.ypos = 0.35
+    peak.greenness.text.ypos = 0.4
     
     # ----------------------------- Plot
     # NMRI, GPP, ET, GCC
@@ -1018,7 +1045,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
         oma = c(0,0,0,0))
     plot(x = nmri.nt$Dates,
          y = nmri.nt$Value,
-         ylim = c(0.4,0.8),
+         ylim = c(0.35, 0.625), # For unfiltered NMRI
          col = 'white', pch = 1, cex = 1.25, 
          xlab = '', ylab = nmri.lab, 
          cex.lab = 1.5, cex.axis = 1.5, las = 1,
@@ -1077,7 +1104,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
     par(new = TRUE)
     plot(x = nmri.nt$Dates,
          y = nmri.nt$Value,
-         ylim = c(0.4,0.8),
+         ylim = c(0.35, 0.625), # For unfiltered NMRI
          col = 'blue', pch = 19, cex = 1.5, 
          xlab = '', ylab = '', cex.lab = 1.5, cex.axis = 0.0001,
          las = 1, axes = FALSE, yaxt = 'n')
@@ -1089,6 +1116,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
          lwd = 2,
          at = pretty(range(nmri.nt$Value, na.rm = TRUE)),
          labels = pretty(range(nmri.nt$Value, na.rm = TRUE)),
+         
          col.axis = nmri.col, col.ticks = nmri.col, col = nmri.col, font = 2)
     # Add legends
     legend(x = date.seq[1]-5,
@@ -1123,11 +1151,11 @@ wkg.nmri.flux.ts.sp.fun = function() {
            y.intersp = ts.legend.yspace,
            bty = 'n',
            cex = 1.5)
-    text(x = as.Date('2021-07-25'), y = 0.4, font = 2, cex = 1.75,
+    text(x = as.Date('2021-07-25'), y = ts.greening.browning.text.ypos, font = 2, cex = 1.75,
          label = 'Greening', col = 'forestgreen')
-    text(x = as.Date('2021-09-25'), y = 0.4, font = 2, cex = 1.75,
+    text(x = as.Date('2021-09-25'), y = ts.greening.browning.text.ypos, font = 2, cex = 1.75,
          label = 'Browning', col = 'darkorange4')
-    text(x = as.Date('2021-08-23'), y = 0.475, font = 2, cex = 1.5,
+    text(x = as.Date('2021-08-23'), y = peak.greenness.text.ypos, font = 2, cex = 1.5,
          label = 'Date of peak\n greenness\n (AUG 23)')
     
     ts.plot = recordPlot()
@@ -1317,10 +1345,10 @@ wkg.nmri.flux.ts.sp.fun = function() {
     axis.labsize = element_text(size = 18)
     axis.titlesize = element_text(size = 18)
     stats.textsize = 8
-    slope.lab.xjust = 0.12
+    slope.lab.xjust = 0.08
     sp.title = element_text(size = 17, face = 'bold', hjust = 0.5)
     legend.textsize = element_text(size = 19)
-    label_x = 0.43
+    label_x = nmri.xlim[1]
     
     # ------------------------------------------------ Plot
     # NMRI vs. GPP
@@ -1368,7 +1396,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
                 fontface = 'bold') +
       xlab(nmri.lab) +
       ylab(gpp.ylab) +
-      xlim(c(0.44,0.76)) +
+      xlim(nmri.xlim) +
       ylim(gpp.ylim) +
       theme_bw() +
       theme(legend.position = 'bottom',
@@ -1425,7 +1453,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
                 fontface = 'bold') +
       xlab(nmri.lab) +
       ylab(et.ylab) +
-      xlim(c(0.44,0.76)) +
+      xlim(nmri.xlim) +
       ylim(et.ylim) +
       theme_bw() +
       theme(legend.position = 'bottom',
@@ -1482,7 +1510,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
                 fontface = 'bold') +
       xlab(nmri.lab) +
       ylab(gcc.ylab) +
-      xlim(c(0.44,0.76)) +
+      xlim(nmri.xlim) +
       ylim(gcc.ylim) +
       theme_bw() +
       theme(legend.position = 'bottom',
@@ -1539,7 +1567,7 @@ wkg.nmri.flux.ts.sp.fun = function() {
 wkg.nmri.flux.ts.sp.fun()
 
 # -------------------------------------------------------------------------------------------------------------------------------------
-# Fig. S3
+# Fig. S6
 # Function for plotting timeseris, scatterplots, box/whisker plots, and bar plots for actual GPP and GPP predicted from nighttime NMRI
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1754,6 +1782,7 @@ gpp.from.nmri.fun = function(nmri.dataset) {
     # Greening/browning phases
     geom_smooth(method = 'lm' , se = FALSE , aes(color = MonsoonPhase), 
                 linewidth = 1.25, na.rm = TRUE, show.legend = FALSE) +
+    xlim(c(0,15)) +
     # ------ Add correlation stats (full set, greening, and drying)
     # Full set
     stat_cor(aes(x = x, y = y),
@@ -1911,7 +1940,7 @@ gpp.from.nmri.fun = function(nmri.dataset) {
                              align = 'v',
                              axis = 't')
   
-  ggsave(filename = paste(figs.fp, 'FigS3_GPP_ACT_EST_TS_SP_BoxPlot_BarPlot.png', sep = '/'),
+  ggsave(filename = paste(figs.fp, 'FigS6_GPP_ACT_EST_TS_SP_BoxPlot_BarPlot.png', sep = '/'),
          ts.sp.bp.combo,
          width = 16, height = 14,
          bg = 'white')
@@ -2756,10 +2785,10 @@ nmri.swc.zscores.ts.sp = function(n.panels) {
 
 nmri.swc.zscores.ts.sp(n.panels = 2)
 
-# --------------------------------------------------------------------------------------------
-# Fig. S1d
-# Function to plot timeseries of GCC (Grass ROI) contrasting 2020 and 2021 seasons
-# --------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------
+# Fig. S1de
+# Function to plot timeseries of GCC (Grass ROI) contrasting 2020 and 2021 seasons, and the 2021 peak GCC date
+# -------------------------------------------------------------------------------------------------------------
 
 wkg.gcc.2020.2021.ts.fun = function() {
   
@@ -2812,42 +2841,101 @@ wkg.gcc.2020.2021.ts.fun = function() {
                                     color = factor(Year),
                                     group = factor(Year))) +
     geom_line(linewidth = 2) +
-    scale_color_manual(values = c('2020' = 'orange3',
+    scale_color_manual(values = c('2020' = 'lightgoldenrod2',
                                   '2021' = 'limegreen')) +
     scale_x_date(date_breaks = '1 month', date_labels = '%b') +
     ylim(c(0.34,0.41)) +
-    annotate('text', x = as.Date('2020-06-30'), y = 0.346, label = 'a)', fontface = 2, size = 5) +
-    annotate('text', x = as.Date('2020-08-23'), y = 0.407, label = 'b)', fontface = 2, size = 5) +
-    annotate('text', x = as.Date('2020-10-26'), y = 0.351, label = 'c)', fontface = 2, size = 5) +
-    ggtitle('90th Percentile GCC [ ] summer 2020 vs. summer 2021') +
+    annotate('text', x = as.Date('2020-06-30'), y = 0.346, label = 'a', fontface = 2, size = 7) +
+    annotate('text', x = as.Date('2020-08-23'), y = 0.407, label = 'b', fontface = 2, size = 7) +
+    annotate('text', x = as.Date('2020-10-26'), y = 0.351, label = 'c', fontface = 2, size = 7) +
+    #ggtitle('90th Percentile GCC [ ] summer 2020 vs. summer 2021') +
     guides(color = guide_legend(position = 'inside', title = '', ncol = 1)) +
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 15),
+          axis.text.x = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks.x = element_blank(),
+          #plot.title = element_text(size = 17),
+          legend.position.inside = c(0.9,0.8),
+          legend.title = element_blank(),
+          legend.text = element_text(size = 17),
+          plot.margin = margin(1, 1, 1.5, 25, 'pt'))
+  
+  # Peak GCC date 2021
+  peak.gcc.df = rbind(data.frame('Dates' = date.seq,
+                                 'GCC' = gcc$gcc_90,
+                                 'Var' = 'Raw'),
+                      data.frame('Dates' = date.seq,
+                                 'GCC' = gcc.smoothed$y,
+                                 'Var' = 'Smoothed'))
+  
+  
+  wkg.peak.gcc.2021.ts = ggplot(data = peak.gcc.df, aes(x = Dates, 
+                                                        y = GCC, 
+                                                        group = Var,
+                                                        color = Var,
+                                                        linewidth = Var,
+                                                        alpha = Var)) +
+    geom_line() +
+    geom_point(data = peak.gcc.df[peak.gcc.df$Var == 'Raw',], size = 2) +
+    scale_color_manual(values = c('Raw' = 'limegreen', 'Smoothed' = 'black')) +
+    scale_linewidth_manual(values = c('Raw' = 1.5, 'Smoothed' = 1)) +
+    scale_alpha_manual(values = c('Raw' = 0.5, 'Smoothed' = 1)) +
+    scale_x_date(date_breaks = '1 month', date_labels = '%b') +
+    geom_point(data = data.frame('x' = date.peak.gcc.smoothed,
+                                 'y' = max(gcc.smoothed$y)),
+               aes(x = x, y = y), 
+               inherit.aes = FALSE, show.legend = FALSE, size = 3) +
+    geom_text(data = data.frame('x' = date.peak.gcc.smoothed,
+                                'y' = 0.4095,
+                                'lab' = '2021 peak GCC (smoothed): AUG 23'),
+              aes(x = x, y = y, label = lab),
+              inherit.aes = FALSE, size = 5.5, fontface = 'bold') +
+    geom_vline(xintercept = date.peak.gcc.smoothed, linewidth = 1, alpha = 0.5, linetype = 'dashed') +
+    geom_text(data = data.frame('x' = as.Date('2021-08-11'),
+                                'y' = 0.345,
+                                'lab' = 'Greening'),
+              aes(x = x, y = y, label = lab),
+              inherit.aes = FALSE, size = 5.5, color = 'forestgreen', fontface = 'bold') +
+    geom_text(data = data.frame('x' = as.Date('2021-09-04'),
+                                'y' = 0.345,
+                                'lab' = 'Browning'),
+              aes(x = x, y = y, label = lab),
+              inherit.aes = FALSE, size = 5.5, color = 'darkorange4', fontface = 'bold') +
+    ylim(c(0.34,0.41)) +
+    guides(color = guide_legend(position = 'inside', title = '', ncol = 1),
+           linewidth = guide_legend(position = 'inside', title = '', ncol = 1),
+           alpha = guide_legend(position = 'inside', title = '', ncol = 1)) +
     theme_bw() +
     theme(axis.text = element_text(size = 15),
           axis.title = element_blank(),
           plot.title = element_text(size = 17),
           legend.position.inside = c(0.9,0.8),
           legend.title = element_blank(),
-          legend.text = element_text(size = 17))
-  
-  wkg.gcc.2020.2021.ts
+          legend.text = element_text(size = 17),
+          plot.margin = margin(1, 1, 1, 25, 'pt'))
   
   # Add figure label and save plot
-  wkg.gcc.2020.2021.ts = plot_grid(plotlist = list(wkg.gcc.2020.2021.ts),
-                                   ncol = 1,
-                                   align = 'v',
-                                   axis = 't',
-                                   labels = 'd)',
-                                   label_size = 15)
+  wkg.gcc.ts.combo = plot_grid(plotlist = list(wkg.gcc.2020.2021.ts, wkg.peak.gcc.2021.ts),
+                               ncol = 1,
+                               align = 'v',
+                               axis = 't',
+                               labels = c('d)','e)'),
+                               label_size = 15,
+                               hjust = -3)
   
-  ggsave(paste(figs.fp, 'FigS1d_WKG_GCC_2020_2021_GCC90.png', sep = '/'),
-         wkg.gcc.2020.2021.ts,
-         width = 8, height = 3)
+  wkg.gcc.ts.combo = ggdraw(wkg.gcc.ts.combo) +
+    draw_label('Daily 90th Percentile GCC [ ]', x = 0, y = 0.5, vjust = 1.5, angle = 90, size = 17)
+  
+  ggsave(paste(figs.fp, 'FigS2de_WKG_GCC_2020_2021_GCC90.png', sep = '/'),
+         wkg.gcc.ts.combo,
+         width = 10, height = 6)
 }
 
 wkg.gcc.2020.2021.ts.fun()
 
 # --------------------------------------------------------------------------------------------
-# Fig. S2
+# Fig. S5
 # Function to plot timeseries of daily mean NMRI and 90th pct. GCC (Grass and Shrub ROIs)
 # --------------------------------------------------------------------------------------------
 wkg.nmri.gr.sh.gcc.2021.ts.fun = function() {
@@ -2858,22 +2946,21 @@ wkg.nmri.gr.sh.gcc.2021.ts.fun = function() {
   
   # Plot
   par(mar = c(2.5,4.5,5,5))
-  plot(#x = wkg.nmri.smoothed$Dates, y = wkg.nmri.smoothed$Value_smoothed,
-       x = wkg.nmri.daily.mean$Dates, y = wkg.nmri.daily.mean$Value,
+  plot(x = wkg.nmri.daily.mean$Dates, y = wkg.nmri.daily.mean$Value,
        pch = 19, cex = 1.25,
        main = 'Walnut Gulch Experimental Watershed - Kendall Grasslands\n2021 Study Period',
        xlab = '', ylab = 'NMRI [ ]',
-       cex.main = 2, cex.axis = 1.4, cex.lab = 1.5)
+       cex.main = 2.5, cex.axis = 1.75, cex.lab = 2)
   lines(x = wkg.nmri.daily.mean$Dates, y = wkg.nmri.daily.mean$Value, lwd = 3)
   par(new = TRUE)
   plot(x = date.seq, y = gcc.gr.21,
        ylim = c(min(c(gcc.gr.21, gcc.sh.21)), max(c(gcc.gr.21, gcc.sh.21))),
        axes = FALSE, xlab = '', ylab = '',
        col = 'springgreen', type = 'l', lwd = 4)
-  axis(side = 4, cex.axis = 1.4,
+  axis(side = 4, cex.axis = 1.75,
        at = pretty(range(c(gcc.gr.21, gcc.sh.21)), n = 6),
        labels = pretty(range(c(gcc.gr.21, gcc.sh.21)), n = 6))
-  mtext('GCC (90th percentile) [ ]', side = 4, cex = 1.5, line = 3.25)
+  mtext('GCC (90th percentile) [ ]', side = 4, cex = 2, line = 3.25)
   par(new = TRUE)
   plot(x = date.seq, y = gcc.sh.21,
        ylim = c(min(c(gcc.gr.21, gcc.sh.21)), max(c(gcc.gr.21, gcc.sh.21))),
@@ -2884,15 +2971,710 @@ wkg.nmri.gr.sh.gcc.2021.ts.fun = function() {
          col = c('black','springgreen','forestgreen'),
          lwd = 3,
          pch = c(19,NA,NA),
-         cex = 1.5)
+         cex = 2)
   box()
   
   ts.plot = as_grob(recordPlot())
   
-  ggsave(filename = paste(figs.fp, 'FigS2_NMRI_GCC_Grass_Shrub_TS.png', sep = '/'),
+  ggsave(filename = paste(figs.fp, 'FigS5_NMRI_GCC_Grass_Shrub_TS.png', sep = '/'),
          ts.plot,
-         width = 12, height = 7, bg = 'white')
+         width = 15, height = 8.5, bg = 'white')
 }
 
 wkg.nmri.gr.sh.gcc.2021.ts.fun()
 
+
+# ------------------------------------------------------------------------------
+# Fig. S4
+# Function for plotting daytime/nighttime LPDR timeseries
+# ------------------------------------------------------------------------------
+
+lpdr.day.night.ts.fun = function() {
+  
+  # Combine daytime/nighttime LPDR and factor dataset names
+  lpdr = lpdr.wkg
+  lpdr$Dates = as.Date(lpdr$Dates)
+  lpdr.am = lpdr[lpdr$Dataset == 'LPDRv3_VOD_ASCENDING_DAY',]
+  lpdr.pm = lpdr[lpdr$Dataset == 'LPDRv3_VOD_DESCENDING_NIGHT',]
+  
+  lpdr.am$Dataset = 'LPDRv3_X_VOD_ASCENDING_DAY'
+  lpdr.pm$Dataset = 'LPDRv3_X_VOD_DESCENDING_NIGHT'
+  
+  wkg.lpdr = rbind(lpdr.am, lpdr.pm)
+  wkg.lpdr = wkg.lpdr[wkg.lpdr$Year %in% c(2021,2022),]
+  wkg.lpdr$Dataset = factor(wkg.lpdr$Dataset, 
+                            levels = c('LPDRv3_X_VOD_ASCENDING_DAY', 'LPDRv3_X_VOD_DESCENDING_NIGHT'), 
+                            labels = c('Daytime Overpass (1:30 PM)', 'Nighttime Overpass (1:30 AM)'))
+  
+  # Get precipitation for corresponding dates
+  amflux = amf_read_base(amflux.base.files, unzip = TRUE, parse_timestamp = TRUE)
+  amflux.precip = amflux$P
+  
+  wkg.precip = data.frame('Dates' = as.Date(as.character(amflux$TIMESTAMP), format = '%Y-%m-%d'),
+                          'DateTimes' = as.POSIXct(paste(amflux$YEAR, amflux$MONTH, amflux$DAY, amflux$HOUR, sep = '-'), format = '%Y-%m-%d-%H'),
+                          'Year' = amflux$YEAR,
+                          'Month' = amflux$MONTH,
+                          'Day' = amflux$DAY,
+                          'LocalHour' = amflux$HOUR,
+                          'Precip' = amflux$P) %>% 
+    group_by(Dates) %>%
+    summarise('Precip' = sum(Precip, na.rm = TRUE),
+              'Year' = first(Year)) %>%
+    as.data.frame()
+  
+  wkg.precip = wkg.precip[wkg.precip$Year %in% c(2021,2022),]
+  
+  precip.scalefactor = max(wkg.lpdr$Value, na.rm = TRUE) / max(wkg.precip$Precip, na.rm = TRUE)
+  # precip.scalefactor = 1.1/51
+  # scale.fact = 1.1/51
+  ylim.prim = c(0.6,1.1)
+  ylim.sec = c(0,51)
+  scale.fact = diff(ylim.prim) / diff(ylim.sec)
+  offset = ylim.prim[1] - ylim.sec[1] * scale.fact
+  
+  trans.sec = function(x) x * scale.fact + offset
+  scale.sec = function(x) (x - offset) / scale.fact
+  
+  precip.breaks = seq(0,50,10)
+  sec.breaks <- trans.sec(precip.breaks)
+  
+  # trans_forward = function(x) { (x - ylim.sec[1]) * scale.fact + ylim.prim[1] }
+  # trans_inverse = function(x) { (x - ylim.prim[1]) / scale.fact + ylim.sec[1] }
+  
+  
+  # Plot timeseries
+  wkg.lpdr.ts = ggplot(data = na.omit(wkg.lpdr), aes(x = Dates, y = Value, color = Dataset)) +
+    geom_point() +
+    geom_line() +
+    scale_color_manual(values = c('Daytime Overpass (1:30 PM)' = 'red', 'Nighttime Overpass (1:30 AM)' = 'blue')) +
+    # Rectangle annotation for monsoon periods
+    annotate('rect', xmin = as.Date('2021-06-15'), xmax = as.Date('2021-09-30'),
+             ymin = -Inf, ymax = Inf, alpha = 0.25, fill = 'steelblue') +
+    annotate('rect', xmin = as.Date('2022-06-15'), xmax = as.Date('2022-09-30'),
+             ymin = -Inf, ymax = Inf, alpha = 0.25, fill = 'steelblue') +
+    # Rectangle annotation for NMRI study period
+    ggpattern::geom_rect_pattern(data = data.frame('xmin' = as.Date('2021-06-30'),
+                                                   'xmax' = as.Date('2021-10-26'),
+                                                   'ymin' = -Inf, 'ymax' = Inf),
+                                 aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                                 pattern = 'crosshatch',
+                                 pattern_density = 0.01,
+                                 pattern_spacing = 0.03,
+                                 pattern_fill = 'transparent',
+                                 pattern_color = 'black',
+                                 pattern_alpha = 0.25,
+                                 fill = 'transparent',
+                                 color = 'black',
+                                 alpha = 0.15,
+                                 inherit.aes = FALSE) +
+    # Text annotation for monsoon period
+    geom_text(data = data.frame('x' = as.Date('2021-04-02'),
+                                'y' = 0.95,
+                                'lab' = 'Monsoon Period -->'),
+              aes(x = x, y = y, label = lab),
+              size = 7, col = 'steelblue', show.legend = FALSE) +
+    geom_text(data = data.frame('x' = as.Date('2021-03-27'),
+                                'y' = 0.9,
+                                'lab' = 'Jun 15 - Sep 30'),
+              aes(x = x, y = y, label = lab),
+              size = 7, col = 'steelblue', show.legend = FALSE) +
+    geom_text(data = data.frame('x' = as.Date('2021-03-27'),
+                                'y' = 0.85,
+                                'lab' = '(annual)'),
+              aes(x = x, y = y, label = lab),
+              size = 7, col = 'steelblue', show.legend = FALSE) +
+    # Text annotation for NMRI study period
+    geom_text(data = data.frame('x' = as.Date('2021-12-25'),
+                                'y' = 0.95,
+                                'lab' = '<-- Study Period'),
+              aes(x = x, y = y, label = lab),
+              size = 7, col = 'black', show.legend = FALSE) +
+    geom_text(data = data.frame('x' = as.Date('2022-01-05'),
+                                'y' = 0.9,
+                                'lab' = 'Jun 30 - Nov 26'),
+              aes(x = x, y = y, label = lab),
+              size = 7, col = 'black', show.legend = FALSE) +
+    geom_text(data = data.frame('x' = as.Date('2022-01-05'),
+                                'y' = 0.85,
+                                'lab' = '(2021)'),
+              aes(x = x, y = y, label = lab),
+              size = 7, col = 'black', show.legend = FALSE) +
+    # Plot precip on second axis
+    geom_bar(data = wkg.precip, 
+             aes(x = Dates, 
+                 #y = trans_forward(Precip),
+                 #y = trans.sec(Precip),
+                 y = Precip * precip.scalefactor),
+             fill = 'royalblue2', color = 'royalblue2',
+             stat = 'identity',
+             inherit.aes = FALSE,
+             show.legend = FALSE) +
+    scale_y_continuous(name = 'LPDR X-Band VOD [ ]',
+                       expand = expansion(mult = c(0,0), add = c(0,0.05)),
+                       # sec.axis = sec_axis(transform = trans_inverse, name = 'Daily Tot. Precipitation [mm]'),
+                       # sec.axis = sec_axis( ~ scale.sec(.), 
+                       #                     breaks = sec.breaks, 
+                       #                     labels = precip.breaks,
+                       #                     name = 'Daily Tot. Precipitation [mm]'),
+                       sec.axis = sec_axis(~ . / precip.scalefactor, name = 'Daily Total Precipitation [mm]')) +
+    coord_cartesian(ylim = c(0,1.1)) +
+    scale_x_datetime(date_breaks = '2 months', date_labels = '%b\n%Y') +
+    # ylab('LPDR X-Band VOD [ ]') +
+    xlab('') +
+    # labs(title = 'Walnut Gulch Kendall Grasslands (WKG)', 
+    #      subtitle = 'LPDRv3 25km X-Band VOD - daytime & nighttime overpass values') +
+    guides(color = guide_legend(override.aes = list(linewidth = 1.5, size = 3))) +
+    theme_bw() +
+    theme(#plot.title = element_text(size = 17, face = 'bold', hjust = 0.5),
+      #plot.subtitle = element_text(size = 16, hjust = 0.5),
+      legend.position = 'bottom',
+      legend.title = element_blank(),
+      legend.text = element_text(size = 18),
+      legend.margin = margin(t = -15),
+      axis.title.y.left = element_text(size = 16),
+      axis.title.y.right = element_text(size = 16, color = 'royalblue2', face = 'bold'),
+      axis.text.y.left = element_text(size = 15),
+      axis.text.y.right = element_text(size = 15, color = 'royalblue2'),
+      axis.text.x = element_text(size = 15),
+      panel.border = element_rect(color = 'black', fill = NA, linewidth = 1))
+  
+  # Subset for Pulse 1
+  wkg.lpdr.p1 = wkg.lpdr[wkg.lpdr$Dates %in% p1.dates,]
+  
+  wkg.lpdr.p1.ts = ggplot(data = na.omit(wkg.lpdr.p1), aes(x = Dates, y = Value, color = Dataset)) +
+    geom_point(pch = 19, size = 3, show.legend = FALSE) +
+    geom_line(show.legend = FALSE) +
+    scale_x_date(breaks = seq(first(p1.dates),last(p1.dates), by = 'day')) +
+    scale_color_manual(values = c('Daytime Overpass (1:30 PM)' = 'red', 'Nighttime Overpass (1:30 AM)' = 'blue')) +
+    geom_vline(xintercept = first(p1.dates), linewidth = 2, alpha = 0.5, color = 'royalblue2') +
+    geom_text(data = data.frame('x' = p1.dates[1],
+                                'y' = 0.63,
+                                'lab' = '<-- 38.4 mm precip. on 7/10'),
+              aes(x = x, y = y, label = lab),
+              size = 7, fontface = 'bold', color = 'royalblue', hjust = -0.02) +
+    ggtitle('Pulse 1 (Jul 10, 2021)') +
+    xlab('') +
+    ylab('LPDR X-Band VOD [ ]') +
+    theme_bw() +
+    theme(plot.title = element_text(size = 20, face = 'bold'),
+          axis.title.y = element_text(size = 16),
+          axis.text = element_text(size = 15),
+          panel.border = element_rect(color = 'black', fill = NA, linewidth = 1))
+  
+  ts.plot.combo = plot_grid(plotlist = list(wkg.lpdr.ts, wkg.lpdr.p1.ts),
+                            ncol = 1,
+                            rel_heights = c(1, 0.5),
+                            labels = c('a)','b)'),
+                            label_size = 19)
+  
+  ggsave(paste(figs.fp, 'FigS4_WKG_LPDR-VOD_AM_PM_2021-2022_wPulse01.png', sep = '/'),
+         ts.plot.combo,
+         width = 14.5, height = 11, bg = 'white')
+  
+}
+
+lpdr.day.night.ts.fun()
+
+
+# ------------------------------------------------------------------------------
+# Fig. S3
+# Function for raw hourly NMRI values at 1:00 AM, 1:00 PM, 6:00 AM, and 6:00 PM
+# ------------------------------------------------------------------------------
+
+nmri.hourly.noise.plot.fun = function() {
+  
+  nmri.1am = na.omit(wkg.nmri[wkg.nmri$LocalHour == 1,])
+  nmri.1pm = na.omit(wkg.nmri[wkg.nmri$LocalHour == 13,])
+  nmri.6am = na.omit(wkg.nmri[wkg.nmri$LocalHour == 6,])
+  nmri.6pm = na.omit(wkg.nmri[wkg.nmri$LocalHour == 18,])
+  
+  nmri.1am = padr::pad(nmri.1am, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame()
+  nmri.1pm = padr::pad(nmri.1pm, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame()
+  nmri.6am = padr::pad(nmri.6am, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame()
+  nmri.6pm = padr::pad(nmri.6pm, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame()
+  
+  nmri.day.mean = wkg.nmri.daytime
+  colnames(nmri.day.mean)[6] = 'Value'
+  nmri.day.mean.loess = loess.datefill(nmri.day.mean, loess.span)
+  
+  nmri.night.mean = wkg.nmri.nighttime
+  colnames(nmri.night.mean)[6] = 'Value'
+  nmri.night.mean.loess = loess.datefill(nmri.night.mean, loess.span)
+  
+  nmri.hourly.df = rbind(data.frame('Dates' = nmri.1am$Dates,
+                                    'NMRI' = nmri.1am$Value,
+                                    'Time' = '01:00'),
+                         data.frame('Dates' = nmri.1pm$Dates,
+                                    'NMRI' = nmri.1pm$Value,
+                                    'Time' = '13:00'),
+                         data.frame('Dates' = nmri.6am$Dates,
+                                    'NMRI' = nmri.6am$Value,
+                                    'Time' = '06:00'),
+                         data.frame('Dates' = nmri.6pm$Dates,
+                                    'NMRI' = nmri.6pm$Value,
+                                    'Time' = '18:00'),
+                         data.frame('Dates' = date.seq,
+                                    #'NMRI' = nmri.day.mean.loess$y,
+                                    #'Time' = 'Daytime Mean (smoothed)',
+                                    'NMRI' = nmri.day.mean$Value,
+                                    'Time' = 'Daytime Mean'),
+                         data.frame('Dates' = date.seq,
+                                    #'NMRI' = nmri.night.mean.loess$y,
+                                    #'Time' = 'Nighttime Mean (smoothed)',
+                                    'NMRI' = nmri.night.mean$Value,
+                                    'Time' = 'Nighttime Mean'))
+  
+  nmri.hourly.df$Time = factor(nmri.hourly.df$Time, levels = c('01:00',
+                                                               '06:00',
+                                                               '13:00',
+                                                               '18:00', 
+                                                               #'Daytime Mean (smoothed)', 
+                                                               #'Nighttime Mean (smoothed)',
+                                                               'Daytime Mean',
+                                                               'Nighttime Mean'))
+  
+  nmri.p1 = wkg.nmri[wkg.nmri$Dates %in% p1.dates,]
+  nmri.p2 = wkg.nmri[wkg.nmri$Dates %in% p2.dates,]
+  nmri.p3 = wkg.nmri[wkg.nmri$Dates %in% p3.dates,]
+  
+  assign.pulse.day.fun = function(pulse) {
+    if (pulse == 'P1') {
+      p.dates = p1.dates
+      p.data = nmri.p1 }
+    if (pulse == 'P2') {
+      p.dates = p2.dates
+      p.data = nmri.p2 }
+    if (pulse == 'P3') {
+      p.dates = p3.dates
+      p.data = nmri.p3 }
+    
+    p.data$PulseDay = NA
+    
+    for (p.day in 1 : length(p.dates)) {
+      p.date = p.dates[p.day]
+      p.data[p.data$Dates %in% p.date,]$PulseDay = as.character(p.day)
+    }
+    return(p.data)
+  }
+  
+  nmri.p1 = assign.pulse.day.fun('P1')
+  nmri.p2 = assign.pulse.day.fun('P2')
+  nmri.p3 = assign.pulse.day.fun('P3')
+  
+  nmri.hourly.pulse.df = rbind(data.frame('DateTime' = nmri.p1$DateTime,
+                                          'LocalHour' = nmri.p1$LocalHour,
+                                          'NMRI' = nmri.p1$Value,
+                                          'PulseDay' = nmri.p1$PulseDay,
+                                          'Pulse' = 'Pulse 1'),
+                               data.frame('DateTime' = nmri.p2$DateTime,
+                                          'LocalHour' = nmri.p2$LocalHour,
+                                          'NMRI' = nmri.p2$Value,
+                                          'PulseDay' = nmri.p2$PulseDay,
+                                          'Pulse' = 'Pulse 2'),
+                               data.frame('DateTime' = nmri.p3$DateTime,
+                                          'LocalHour' = nmri.p3$LocalHour,
+                                          'NMRI' = nmri.p3$Value,
+                                          'PulseDay' = nmri.p3$PulseDay,
+                                          'Pulse' = 'Pulse 3'))
+  
+  nmri.hourly.pulse.df$Pulse = factor(nmri.hourly.pulse.df$Pulse, 
+                                      levels = c('Pulse 1', 'Pulse 2', 'Pulse 3'),
+                                      labels = c('Pulse 1 (07/10)', 'Pulse 2 (08/14)', 'Pulse 3 (09/29)'))
+  
+  nmri.hourly.pulse.df$LocalHour = factor(nmri.hourly.pulse.df$LocalHour,
+                                          levels = sort(unique(nmri.hourly.pulse.df$LocalHour)),
+                                          labels = c('00:00','01:00','02:00','03:00','04:00','05:00',
+                                                     '06:00','07:00','08:00','09:00','10:00','11:00',
+                                                     '12:00','13:00','14:00','15:00','16:00','17:00',
+                                                     '18:00','19:00','20:00','21:00','22:00','23:00'))
+  
+  pulseday.cols = colorRamps::primary.colors(9)
+  
+  # Plot timeseries
+  nmri.hourly.values.ts = ggplot(data = nmri.hourly.df, 
+                                 aes(x = Dates, y = NMRI, color = Time, alpha = Time, linewidth = Time, group = Time)) +
+    geom_line() +
+    geom_point(size = 2) +
+    scale_color_manual(values = c('01:00' = 'forestgreen', 
+                                  '06:00' = 'steelblue',
+                                  '13:00' = 'cyan',
+                                  '18:00' = 'orange',
+                                  #'Daytime Mean (smoothed)' = 'red',
+                                  #'Nighttime Mean (smoothed)' = 'blue',
+                                  'Daytime Mean' = 'red',
+                                  'Nighttime Mean' = 'blue')) +
+    scale_alpha_manual(values = c('01:00' = 0.5, 
+                                  '06:00' = 0.5,
+                                  '13:00' = 0.5,
+                                  '18:00' = 0.5,
+                                  #'Daytime Mean (smoothed)' = 0.5,
+                                  #'Nighttime Mean (smoothed)' = 0.5,
+                                  'Daytime Mean' = 0.75,
+                                  'Nighttime Mean' = 0.75)) +
+    scale_linewidth_manual(values = c('01:00' = 1, 
+                                      '06:00' = 1,
+                                      '13:00' = 1,
+                                      '18:00' = 1,
+                                      #'Daytime Mean (smoothed)' = 2.5,
+                                      #'Nighttime Mean (smoothed)' = 2.5,
+                                      'Daytime Mean' = 2,
+                                      'Nighttime Mean' = 2)) +
+    ggpattern::geom_rect_pattern(data = data.frame('xmin' = first(p1.dates),
+                                                   'xmax' = last(p1.dates),
+                                                   'ymin' = -Inf, 'ymax' = Inf),
+                                 aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                                 pattern = 'crosshatch',
+                                 pattern_density = 0.01,
+                                 pattern_spacing = 0.03,
+                                 pattern_fill = 'transparent',
+                                 pattern_color = 'black',
+                                 pattern_alpha = 0.2,
+                                 fill = 'transparent',
+                                 color = rgb(0,0,0,0.2),
+                                 inherit.aes = FALSE) +
+    ggpattern::geom_rect_pattern(data = data.frame('xmin' = first(p2.dates),
+                                                   'xmax' = last(p2.dates),
+                                                   'ymin' = -Inf, 'ymax' = Inf),
+                                 aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                                 pattern = 'crosshatch',
+                                 pattern_density = 0.01,
+                                 pattern_spacing = 0.03,
+                                 pattern_fill = 'transparent',
+                                 pattern_color = 'black',
+                                 pattern_alpha = 0.2,
+                                 fill = 'transparent',
+                                 color = rgb(0,0,0,0.2),
+                                 inherit.aes = FALSE) +
+    ggpattern::geom_rect_pattern(data = data.frame('xmin' = first(p3.dates),
+                                                   'xmax' = last(p3.dates),
+                                                   'ymin' = -Inf, 'ymax' = Inf),
+                                 aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                                 pattern = 'crosshatch',
+                                 pattern_density = 0.01,
+                                 pattern_spacing = 0.03,
+                                 pattern_fill = 'transparent',
+                                 pattern_color = 'black',
+                                 pattern_alpha = 0.2,
+                                 fill = 'transparent',
+                                 color = rgb(0,0,0,0.2),
+                                 inherit.aes = FALSE) +
+    xlab('') +
+    ylab('Raw Hourly NMRI [ ]') +
+    guides(color = guide_legend(nrow = 1),
+           alpha = guide_legend(nrow = 1),
+           linewidth = guide_legend(nrow = 1)) +
+    theme_bw() +
+    theme(legend.position = 'top',
+          legend.title = element_blank(),
+          legend.text = element_text(size = 20),
+          legend.margin = margin(b = -10),
+          axis.title = element_text(size = 17),
+          axis.text = element_text(size = 16),
+          panel.border = element_rect(color = 'black', fill = NA, linewidth = 1),
+          plot.margin = margin(1, 15, -5, 5, 'pt'))
+  
+  # ggsave(paste(figs.fp, 'FigSX_WKG_Raw_Hourly_NMRI_Noise.png', sep = '/'),
+  #        nmri.hourly.values.ts,
+  #        width = 14, height = 5, bg = 'white')
+  
+  
+  nmri.hourly.pulse.ts = ggplot(data = nmri.hourly.pulse.df,
+                                aes(x = DateTime, y = NMRI)) +
+    geom_line(linewidth = 0.5, alpha = 0.5) +
+    geom_point(size = 1.5) +
+    xlab('') +
+    ylab('Raw Hourly NMRI [ ]') +
+    facet_wrap(Pulse~., ncol = 3, scales = 'free_x') +
+    theme_bw() +
+    theme(axis.title = element_text(size = 17),
+          axis.text = element_text(size = 16),
+          plot.margin = margin(1, 15, -5, 5, 'pt'),
+          panel.border = element_rect(color = 'black', fill = NA, linewidth = 1),
+          strip.text = element_text(size = 17, color = 'black', face = 'bold'),
+          strip.background = element_rect(fill = 'white', color = 'white'))
+  
+  
+  nmri.hourly.by.pulseday.ts = ggplot(data = nmri.hourly.pulse.df,
+                                      aes(x = LocalHour, 
+                                          y = NMRI, 
+                                          #color = PulseDay, 
+                                          group = PulseDay)) +
+    geom_line(linewidth = 0.5, alpha = 0.5) +
+    geom_point(size = 1.5) +
+    #scale_color_discrete(palette = pulseday.cols, name = 'Pulse Day') +
+    scale_x_discrete(breaks = c('00:00','04:00','08:00','12:00','16:00','20:00','24:00')) +
+    xlab('') +
+    ylab('Raw Hourly NMRI [ ]') +
+    facet_wrap(Pulse~., ncol = 3, scales = 'fixed') +
+    theme_bw() +
+    theme(axis.title = element_text(size = 17),
+          axis.text.y = element_text(size = 16),
+          axis.text.x = element_text(size = 16, angle = 20, hjust = 0.8, vjust = 0.75),
+          plot.margin = margin(1, 15, 1, 5, 'pt'),
+          panel.border = element_rect(color = 'black', fill = NA, linewidth = 1),
+          strip.text = element_text(size = 17, color = 'black', face = 'bold'),
+          strip.background = element_rect(fill = 'white', color = 'white'))
+  
+  
+  # nmri.hourly.plot.combo = plot_grid(plotlist = list(nmri.hourly.values.ts, nmri.hourly.pulse.ts),
+  #                                    ncol = 1,
+  #                                    rel_heights = c(1,0.8),
+  #                                    labels = c('a)','b)'),
+  #                                    label_size = 19,
+  #                                    hjust = -0.25,
+  #                                    vjust = 2.5)
+  
+  nmri.hourly.plot.combo = plot_grid(plotlist = list(nmri.hourly.values.ts,
+                                                     nmri.hourly.pulse.ts,
+                                                     nmri.hourly.by.pulseday.ts),
+                                     ncol = 1,
+                                     rel_heights = c(1,0.8,0.8),
+                                     labels = c('a)','b)','c)'),
+                                     label_size = 20,
+                                     hjust = -0.1)
+  
+  ggsave(paste(figs.fp, 'FigS3_WKG_Raw_Hourly_NMRI_Noise_with_Pulses.png', sep = '/'),
+         nmri.hourly.plot.combo,
+         width = 14, height = 12, bg = 'white')
+}
+
+nmri.hourly.noise.plot.fun()
+
+
+# ------------------------------------------------------------------------------
+# Table S1
+# Function for computing NMRI (hourly vs. agg.) ~ VOD relationships
+# ------------------------------------------------------------------------------
+
+nmri.vod.hourly.vs.agg.fun = function() {
+  
+  nmri.1am = na.omit(wkg.nmri[wkg.nmri$LocalHour == 1,])
+  nmri.1pm = na.omit(wkg.nmri[wkg.nmri$LocalHour == 13,])
+  nmri.6am = na.omit(wkg.nmri[wkg.nmri$LocalHour == 6,])
+  nmri.6pm = na.omit(wkg.nmri[wkg.nmri$LocalHour == 18,])
+  
+  nmri.1am = precip.filter.fun(zscore.fun(padr::pad(nmri.1am, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame(), 'Value'), 'Value')
+  nmri.1pm = precip.filter.fun(zscore.fun(padr::pad(nmri.1pm, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame(), 'Value'), 'Value')
+  nmri.6am = precip.filter.fun(zscore.fun(padr::pad(nmri.6am, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame(), 'Value'), 'Value')
+  nmri.6pm = precip.filter.fun(zscore.fun(padr::pad(nmri.6pm, date.seq[1], tail(date.seq,1), interval = 'day', by = 'Dates') %>% as.data.frame(), 'Value'), 'Value')
+  
+  nmri.day.mean = zscore.fun(wkg.nmri.daytime, 'NMRI_PeriodMean')
+  nmri.night.mean = zscore.fun(wkg.nmri.nighttime, 'NMRI_PeriodMean')
+  
+  nmri.1am.lpdr.desc.lm = lm(lpdr.desc.zscore$Value ~ nmri.1am$Value, na.action = na.omit)
+  nmri.1pm.lpdr.asc.lm = lm(lpdr.asc.zscore$Value ~ nmri.1pm$Value, na.action = na.omit)
+  nmri.1am.lprm.desc.lm = lm(lprm.desc.zscore$Value ~ nmri.1am$Value, na.action = na.omit)
+  nmri.1pm.lprm.asc.lm = lm(lprm.asc.zscore$Value ~ nmri.1pm$Value, na.action = na.omit)
+  nmri.6am.smap.am.lm = lm(smap.am.zscore$Value ~ nmri.6am$Value, na.action = na.omit)
+  nmri.6pm.smap.pm.lm = lm(smap.pm.zscore$Value ~ nmri.6pm$Value, na.action = na.omit)
+  
+  nmri.1am.lpdr.desc.r2 = round(summary(nmri.1am.lpdr.desc.lm)$r.squared, 2)
+  nmri.1pm.lpdr.asc.r2 = round(summary(nmri.1pm.lpdr.asc.lm)$r.squared, 2)
+  nmri.1am.lprm.desc.r2 = round(summary(nmri.1am.lprm.desc.lm)$r.squared, 2)
+  nmri.1pm.lprm.asc.r2 = round(summary(nmri.1pm.lprm.asc.lm)$r.squared, 2)
+  nmri.6am.smap.am.r2 = round(summary(nmri.6am.smap.am.lm)$r.squared, 2)
+  nmri.6pm.smap.pm.r2 = round(summary(nmri.6pm.smap.pm.lm)$r.squared, 2)
+  
+  extract.pval = function(lm.in) {
+    pval = broom::glance(nmri.1am.lpdr.desc.lm)$p.value
+    if (pval < 0.001 )  { pval = '< 0.001' }
+    if (pval >= 0.001 ) { pval = as.character(pval) }
+    return(pval)
+  }
+  
+  nmri.1am.lpdr.desc.p = extract.pval(nmri.1am.lpdr.desc.lm)
+  nmri.1pm.lpdr.asc.p = extract.pval(nmri.1pm.lpdr.ascsc.lm)
+  nmri.1am.lprm.desc.p = extract.pval(nmri.1am.lprm.desc.lm)
+  nmri.1pm.lprm.asc.p = extract.pval(nmri.1pm.lprm.asc.lm)
+  nmri.6am.smap.am.p = extract.pval(nmri.6am.smap.am.lm)
+  nmri.6pm.smap.pm.p = extract.pval(nmri.6pm.smap.pm.lm)
+  
+  nmri.day.lpdr.asc.lm = lm(lpdr.asc.zscore$Value ~ nmri.day.mean$Value, na.action = na.omit)
+  nmri.night.lpdr.desc.lm = lm(lpdr.desc.zscore$Value ~ nmri.night.mean$Value, na.action = na.omit)
+  nmri.day.lprm.asc.lm = lm(lprm.asc.zscore$Value ~ nmri.day.mean$Value, na.action = na.omit)
+  nmri.night.lprm.desc.lm = lm(lprm.desc.zscore$Value ~ nmri.night.mean$Value, na.action = na.omit)
+  nmri.night.smap.am.lm = lm(smap.am.zscore$Value ~ nmri.night.mean$Value, na.action = na.omit)
+  nmri.day.smap.pm.lm = lm(smap.pm.zscore$Value ~ nmri.day.mean$Value, na.action = na.omit)
+  
+  nmri.day.lpdr.asc.r2 = round(summary(nmri.day.lpdr.asc.lm)$r.squared, 2)
+  nmri.night.lpdr.desc.r2 = round(summary(nmri.night.lpdr.desc.lm)$r.squared, 2)
+  nmri.day.lprm.asc.r2 = round(summary(nmri.day.lprm.asc.lm)$r.squared, 2)
+  nmri.night.lprm.desc.r2 = round(summary(nmri.night.lprm.desc.lm)$r.squared, 2)
+  nmri.night.smap.am.r2 = round(summary(nmri.night.smap.am.lm)$r.squared, 2)
+  nmri.day.smap.pm.r2 = round(summary(nmri.day.smap.pm.lm)$r.squared, 2)
+  
+  nmri.day.lpdr.asc.p = extract.pval(nmri.day.lpdr.asc.lm)
+  nmri.night.lpdr.desc.p = extract.pval(nmri.night.lpdr.desc.lm)
+  nmri.day.lprm.asc.p = extract.pval(nmri.day.lprm.asc.lm)
+  nmri.night.lprm.desc.p = extract.pval(nmri.night.lprm.desc.lm)
+  nmri.night.smap.am.p = extract.pval(nmri.night.smap.am.lm)
+  nmri.day.smap.pm.p = extract.pval(nmri.day.smap.pm.lm)
+  
+  nmri.vod.stats.df = data.frame('VOD' = c('LPDR (1:30 AM)',
+                                           'LPDR (1:30 PM)',
+                                           'LPRM (1:30 AM)',
+                                           'LPRM (1:30 PM)',
+                                           'SMAP-DCA (6:00 AM)',
+                                           'SMAP-DCA (6:00 PM)'),
+                                 'NMRI (hourly val.)' = c('1:00 AM',
+                                                          '1:00 PM',
+                                                          '1:00 AM',
+                                                          '1:00 PM',
+                                                          '6:00 AM',
+                                                          '6:00 PM'),
+                                 'R2' = c(nmri.1am.lpdr.desc.r2,
+                                          nmri.1pm.lpdr.asc.r2, 
+                                          nmri.1am.lprm.desc.r2,
+                                          nmri.1pm.lprm.asc.r2,
+                                          nmri.6am.smap.am.r2, 
+                                          nmri.6pm.smap.pm.r2),
+                                 'P' = c(nmri.1am.lpdr.desc.p,
+                                         nmri.1pm.lpdr.asc.p, 
+                                         nmri.1am.lprm.desc.p,
+                                         nmri.1pm.lprm.asc.p,
+                                         nmri.6am.smap.am.p, 
+                                         nmri.6pm.smap.pm.p),
+                                 'NMRI (agg. val.)' = c('Nighttime mean',
+                                                        'Daytime mean',
+                                                        'Nighttime mean',
+                                                        'Daytime mean',
+                                                        'Nighttime mean',
+                                                        'Daytime mean'),
+                                 'R2' = c(nmri.night.lpdr.desc.r2,
+                                          nmri.day.lpdr.asc.r2,
+                                          nmri.night.lprm.desc.r2,
+                                          nmri.day.lprm.asc.r2,
+                                          nmri.night.smap.am.r2,
+                                          nmri.day.smap.pm.r2),
+                                 'P' = c(nmri.night.lpdr.desc.p,
+                                         nmri.day.lpdr.asc.p,
+                                         nmri.night.lprm.desc.p,
+                                         nmri.day.lprm.asc.p,
+                                         nmri.night.smap.am.p,
+                                         nmri.day.smap.pm.p))
+  
+  colnames(nmri.vod.stats.df) = c(bquote('VOD'), 
+                                  bquote('NMRI hourly'), 
+                                  bquote(R^2), 
+                                  bquote('P'),
+                                  bquote('NMRI agg.'), 
+                                  bquote(R^2), 'P')
+  
+  # Plot table
+  nmri.vod.stats.table = ggtexttable(nmri.vod.stats.df,
+                                     rows = NULL,
+                                     theme = ttheme('blank', 
+                                                    base_size = 15,
+                                                    padding = unit(rep(10,7), 'mm'),
+                                                    colnames.style = colnames_style(color = 'black',
+                                                                                    fill = 'transparent',
+                                                                                    size = 16,
+                                                                                    parse = TRUE))) %>%
+    tab_add_hline(at.row = c(1,2), row.side = 'top', linewidth = 3, linetype = 1) %>%
+    tab_add_hline(at.row = c(7), row.side = 'bottom', linewidth = 3, linetype = 1) %>%
+    tab_add_vline(at.column = 2:7, column.side = 'left', from.row = 2, linetype = 2) %>%
+    tab_add_border(from.row = 1, to.row = 1, from.column = 1, to.column = 2, linetype = 1, linewidth = 1.5) %>%
+    tab_add_border(from.row = 1, to.row = 1, from.column = 2, to.column = 3, linetype = 1, linewidth = 1.5) %>%
+    tab_add_border(from.row = 1, to.row = 1, from.column = 3, to.column = 4, linetype = 1, linewidth = 1.5) %>%
+    tab_add_border(from.row = 1, to.row = 1, from.column = 4, to.column = 5, linetype = 1, linewidth = 1.5) %>%
+    tab_add_border(from.row = 1, to.row = 1, from.column = 5, to.column = 6, linetype = 1, linewidth = 1.5) %>%
+    tab_add_border(from.row = 1, to.row = 1, from.column = 6, to.column = 7, linetype = 1, linewidth = 1.5) %>%
+    tbody_add_border(from.row = 1, to.row = 7, from.column = 1, to.column = 7, linewidth = 3) %>%
+    tab_add_title(text = 'Statistics for VOD~NMRI linear relationships -- full study period (Jun 30 - Nov 26)', 
+                  size = 16.5, 
+                  face = 'bold')
+  
+  ggsave(paste(figs.fp, 'TabS1_NMRI_VOD_Stats_Table.png', sep = '/'),
+         nmri.vod.stats.table,
+         width = 10, height = 4.5, bg = 'white')
+}
+
+nmri.vod.hourly.vs.agg.fun()
+
+
+# ------------------------------------------------------------------------------
+# Figure S1
+# Function for plotting the bare earth DTM surrounding the WKG site
+# ------------------------------------------------------------------------------
+
+wkg.dtm.plot.fun = function() {
+  
+  # Read DTM raster file
+  wkg.dtm = raster::raster(paste(gitdata.fp, '3DEP_DTM', 'WKG_DTM_meters.tif', sep = '/'))
+  
+  # Create DTM hillshade
+  dtm.hillshade.fun = function(dtm) {
+    dtm.slope = terra::rast(terra::terrain(dtm, opt = 'slope'))
+    dtm.aspect = terra::rast(terra::terrain(dtm, opt = 'aspect'))
+    dtm.hillshade = terra::shade(dtm.slope, dtm.aspect, angle = 45, direction = 300, normalize = TRUE)
+    return(dtm.hillshade)
+  }
+  
+  wkg.dtm.hillshade = dtm.hillshade.fun(wkg.dtm)
+  
+  # Convert to data frame and create WKG site point
+  wkg.dtm.df = raster::as.data.frame(wkg.dtm, xy = TRUE)
+  names(wkg.dtm.df) = c('x','y','Elevation')
+  
+  wkg.coords = data.frame('x' = 31.73643, 'y' = -109.941989)
+  
+  wkg.point = sf::st_as_sf(sp::spTransform(sp::SpatialPointsDataFrame(coords = wkg.coords[,c(2,1)],
+                                                                      data = wkg.coords,
+                                                                      proj4string = sp::CRS('+proj=longlat +datum=WGS84 +no_defs +type=crs')),
+                                               CRSobj = terra::crs(wkg.dtm)))
+  
+  wkg.elev.max = round(max(wkg.dtm[]),0)
+  wkg.elev.min = round(min(wkg.dtm[]),0)
+  wkg.elev.mean = round(mean(wkg.dtm[]),0)
+  wkg.elev.std = round(sd(wkg.dtm[]),0)
+  
+  wkg.dtm.subtitle = paste(paste('[Region]','Max:',wkg.elev.max,'m'),
+                           paste('Min:',wkg.elev.min,'m'),
+                           paste('Mean:',wkg.elev.mean,'m'),
+                           paste('STD:',wkg.elev.std,'m'), sep = ' | ')
+  
+  # Plot
+  wkg.dtm.plot = ggplot() +
+    # Hillshade
+    geom_raster(data = as.data.frame(wkg.dtm.hillshade, xy = TRUE),
+                aes(x, y, fill = hillshade),
+                show.legend = FALSE) +
+    scale_fill_distiller(palette = 'Greys') +
+    # Elevation
+    ggnewscale::new_scale_fill() +
+    geom_raster(data = wkg.dtm.df, aes(x = x, y = y, fill = Elevation), alpha = 0.75) +
+    scale_fill_gradientn(colors = colorRamps::matlab.like2(100),
+                         #breaks = seq(1480, 1550, 50),
+                         limits = c(1480, 1550),
+                         na.value = 'transparent',
+                         name = 'Elevation (meters)') +
+    # Site location
+    geom_sf(data = wkg.point, pch = 8, size = 8, stroke = 2) +
+    ggspatial::annotation_scale(location = 'br', width_hint = 0.5, text_cex = 1.5, text_face = 'bold', text_col = 'black') +
+    ggspatial::annotation_north_arrow(style = ggspatial::north_arrow_minimal(text_face = 'bold'), location = 'tl') +
+    xlab('') +
+    ylab('') +
+    ggtitle(label = 'AmeriFlux US-Wkg\n[Tower] 31.73643 lat | -109.941989 lon | 1531 m elev.', subtitle = wkg.dtm.subtitle) +
+    scale_x_continuous(expand = c(0.005,0.005)) +
+    scale_y_continuous(expand = c(0.005,0.005)) +
+    theme_test() +
+    theme(plot.title = element_text(size = 17, face = 'bold', hjust = 0.5),
+          plot.subtitle = element_text(size = 17, hjust = 0.5),
+          legend.margin = margin(-10,0,0,0, unit = 'pt'),
+          legend.frame = element_rect(fill = 'transparent', color = 'black', linewidth = 0.5),
+          legend.key.width = unit(3.5, 'cm'),
+          legend.title = element_text(size = 17, face = 'bold', hjust = 0.5),
+          legend.title.position = 'top',
+          legend.position = 'bottom',
+          legend.text = element_text(size = 15),
+          axis.text.y = element_text(size = 13, angle = 90, hjust = 0.5),
+          axis.text.x = element_text(size = 13),
+          panel.border = element_rect(fill = NA, colour = 'black', linewidth = 1.5))
+  
+  
+  ggsave(filename = paste(figs.fp, 'FigS1_WKG_GNSS_DEM_Map.png', sep = '/'),
+         wkg.dtm.plot,
+         width = 8, height = 9, bg = 'white')
+}
+
+wkg.dtm.plot.fun()
